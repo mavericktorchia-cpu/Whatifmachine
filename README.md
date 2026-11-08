@@ -88,13 +88,34 @@ sWAR correlates with standings points (r > 0.8).
   then league minimum + recent WAR × market $/WAR, capped at 20% of the ceiling. Modelled values are marked
   with `*`.
 
+### League responses (`src/engine/responses.ts`)
+Three second-order effects run after your changes. Each can be switched off under **League responses**,
+and every WAR change is broken down into *you / draft / depth / deadline*.
+
+- **Draft order.** After each changed season, the next draft's first round is re-ordered from the
+  alternate standings: non-playoff teams first, then by points. The team gains or loses the historical
+  value difference between its old and new slot, spread over the next ten seasons. That value comes from
+  every draft with a complete ten-year window: about 19.5 WAR for the #1 pick to its drafting team, 4.8
+  at #10 and 1.9 at #30 (smoothed so it never rises down the board). Expected value is used rather than
+  "whoever really went at that slot", because neighbouring picks can differ wildly (Giroux went 22nd).
+  - Lottery winners and forfeited picks (3+ slots from their standings position) keep their slot.
+  - The effect is first-order: only standings moved by your changes re-order a draft, never earlier draft
+    adjustments, so it can't snowball.
+- **Depth chart.** An arriving player takes games from the bottom quarter of his new team's depth chart at
+  his position (F/D/G), not from a replacement-level call-up. Those players' WAR per game (clamped to
+  −0.02…+0.03) is subtracted; a departure gives it back.
+- **Deadline moves.** Every mid-season team change since 1979 is grouped by fifths of the final standings.
+  Best to worst, each fifth nets about +0.15, +0.19, +0.16, −0.09 and −0.43 WAR in-season: bad teams sell
+  more than good teams buy. When a team's alternate standing moves, it gets the difference between the
+  curve at its new and old standing (changes under 0.05 WAR are ignored).
+
 ## Limitations
 
 - sWAR is an approximation. Use it to compare players, not as an official figure.
 - Trades are curated, because the NHL has no public trade ledger. Picks that never produced an NHL player,
   cash and future considerations are listed but carry no value.
-- There are no second-order effects: no extra trades or signings by teams in response, and no
-  development changes from a different environment.
+- League responses are averages, not predictions of specific moves. Free-agent signings, cap-forced
+  moves and player development in a different environment are not modelled.
 - Coverage starts in 1979-80, the first season after the WHA merger. The 2004-05 lockout season doesn't
   exist.
 

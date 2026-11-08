@@ -85,7 +85,7 @@ function wasWith(ix: DataIndex, ov: Overrides, pid: number, franchise: number, r
 }
 
 /** Reassign rows to `franchise` (using whatever abbrev it had each season). */
-function reassign(ix: DataIndex, ov: Overrides, rows: number[], franchise: number | null, pid: number, warnings: string[]): Move[] {
+export function reassign(ix: DataIndex, ov: Overrides, rows: number[], franchise: number | null, pid: number, warnings: string[]): Move[] {
   const moves = new Map<string, Move>();
   for (const i of rows) {
     const r = ix.ds.rows[i];

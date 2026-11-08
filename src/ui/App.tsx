@@ -8,6 +8,8 @@ import { CustomPanel } from "./CustomPanel";
 import { DraftPanel } from "./DraftPanel";
 import { Results } from "./Results";
 import { ScenarioList } from "./ScenarioList";
+import { ResponsesPanel } from "./ResponsesPanel";
+import type { ResponseOptions } from "../engine/responses";
 import { TradesPanel } from "./TradesPanel";
 import { readScenario, writeScenario } from "./scenarioUrl";
 
@@ -26,6 +28,7 @@ export function App() {
   const initial = useMemo(readScenario, []);
   const [changes, setChanges] = useState<Change[]>(initial.changes);
   const [seed, setSeed] = useState(initial.seed);
+  const [responses, setResponses] = useState<ResponseOptions>(initial.responses);
   const [tab, setTab] = useState<Tab>("trades");
   const [computed, setComputed] = useState<Computed | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,18 +52,18 @@ export function App() {
   }, [ix]);
 
   useEffect(() => {
-    writeScenario(changes, seed);
+    writeScenario(changes, seed, responses);
     if (!ix || !cap) return;
     setBusy(true);
     // Let the "simulating" state paint before the (synchronous) Monte Carlo runs.
     const h = window.setTimeout(() => {
       const { overrides, applied } = applyAll(ix, changes);
-      const timeline = computeTimeline(ix, overrides, cap, { seed });
+      const timeline = computeTimeline(ix, overrides, cap, { seed, responses });
       setComputed({ overrides, applied, timeline, summary: summarize(ix, timeline) });
       setBusy(false);
     }, 20);
     return () => window.clearTimeout(h);
-  }, [ix, cap, changes, seed]);
+  }, [ix, cap, changes, seed, responses]);
 
   const add = (c: Change) => setChanges((cs) => [...cs, c]);
   const remove = (k: number) => setChanges((cs) => cs.filter((_, i) => i !== k));
@@ -94,6 +97,7 @@ export function App() {
       <main className="layout">
         <aside className="builder">
           <ScenarioList ix={ix} changes={changes} applied={computed?.applied ?? []} onRemove={remove} onReplace={replace} onClear={() => setChanges([])} />
+          <ResponsesPanel value={responses} onChange={setResponses} timeline={computed?.timeline ?? null} />
           <nav className="tabs" role="tablist">
             {(
               [

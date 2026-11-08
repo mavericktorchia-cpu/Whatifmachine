@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CapModel } from "../engine/cap";
 import type { DataIndex } from "../engine/dataIndex";
-import { roster, type TeamSeasonResult } from "../engine/timeline";
+import { roster, type ResponseNote, type TeamSeasonResult, type WarComponents } from "../engine/timeline";
 import type { Computed } from "./App";
 import { FranchiseChart } from "./Chart";
 import { fmtSeason, money, pct, playerName, signed, teamName, tone } from "./format";
@@ -65,10 +65,13 @@ export function Results({ ix, cap, computed, busy, hasChanges }: Props) {
                 <tr key={s.franchise} className={`clickable ${s.franchise === fr ? "sel" : ""}`} onClick={() => setFr(s.franchise)}>
                   <td>
                     <span className="badge">{s.team}</span> {s.name}
-                    {s.seasonsAffected === 0 && <span className="muted small"> · rival</span>}
+                    {s.seasonsAffected === 0 && <span className="muted small"> · {Math.abs(s.deltaWar) >= 0.5 ? "league response" : "rival"}</span>}
                   </td>
                   <td className="num">{s.seasonsAffected || "—"}</td>
-                  <td className={`num ${tone(s.deltaWar, 0.05)}`}>{signed(s.deltaWar)}</td>
+                  <td className={`num ${tone(s.deltaWar, 0.05)}`}>
+                    {signed(s.deltaWar)}
+                    <Breakdown c={s.components} />
+                  </td>
                   <td className={`num ${tone(s.deltaPts, 0.5)}`}>{signed(s.deltaPts, 0)}</td>
                   <td className={`num ${tone(s.deltaPlayoffs)}`}>{s.deltaPlayoffs ? signed(s.deltaPlayoffs, 0) : "—"}</td>
                   <td className={`num ${tone(s.deltaExpectedCups, 0.005)}`}>{signed(s.deltaExpectedCups, 2)}</td>
@@ -110,6 +113,7 @@ export function Results({ ix, cap, computed, busy, hasChanges }: Props) {
             </h2>
           </div>
           <FranchiseChart rows={rows} selected={season} onSelect={setSeason} />
+          <DraftNotes ix={ix} notes={computed.timeline.notes.filter((n) => ix.ds.teams[n.team]?.franchise === focus.franchise)} />
           <div className="scroll-x">
             <table className="tbl seasons">
               <thead>
@@ -139,6 +143,48 @@ export function Results({ ix, cap, computed, busy, hasChanges }: Props) {
   );
 }
 
+/** Where a WAR change came from: the user's own moves vs. each league response. */
+function Breakdown({ c }: { c: WarComponents }) {
+  const parts = (
+    [
+      ["you", c.direct],
+      ["draft", c.draft],
+      ["depth", c.depth],
+      ["deadline", c.deadline],
+    ] as [string, number][]
+  ).filter(([, v]) => Math.abs(v) >= 0.05);
+  if (parts.length <= 1 && Math.abs(c.direct) >= 0.05) return null;
+  if (!parts.length) return null;
+  return (
+    <div className="breakdown">
+      {parts.map(([k, v]) => (
+        <span key={k}>
+          {k} {signed(v)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DraftNotes({ ix, notes }: { ix: DataIndex; notes: ResponseNote[] }) {
+  if (!notes.length) return null;
+  const top = [...notes].sort((a, b) => Math.abs(b.war) - Math.abs(a.war)).slice(0, 6);
+  return (
+    <div className="draft-notes">
+      <div className="muted small">Draft position changes ({teamName(ix, notes[0].team)})</div>
+      <ul>
+        {top
+          .sort((a, b) => a.season - b.season)
+          .map((n) => (
+            <li key={n.text} className={`small ${tone(n.war, 0.05)}`}>
+              {n.text}
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+}
+
 function playoffLabel(made: boolean) {
   return made ? "In" : "Out";
 }
@@ -151,7 +197,10 @@ function SeasonRow({ ix, r, selected, onSelect, champ }: { ix: DataIndex; r: Tea
       <td>
         {fmtSeason(r.season)} {r.team !== ix.ds.teams[r.team]?.name && <span className="muted small">{r.team}</span>}
       </td>
-      <td className={`num ${tone(r.deltaWar, 0.05)}`}>{signed(r.deltaWar)}</td>
+      <td className={`num ${tone(r.deltaWar, 0.05)}`}>
+        {signed(r.deltaWar)}
+        <Breakdown c={r.components} />
+      </td>
       <td className="num">
         {r.actualPts} → <strong>{Math.round(r.altPts)}</strong> <span className={`small ${tone(dPts, 0.5)}`}>({signed(dPts, 0)})</span>
       </td>
@@ -188,7 +237,7 @@ function SeasonRow({ ix, r, selected, onSelect, champ }: { ix: DataIndex; r: Tea
 
 function SeasonDetail({ ix, cap, computed, team }: { ix: DataIndex; cap: CapModel; computed: Computed; team: TeamSeasonResult }) {
   const s = ix.season.get(team.season)!;
-  const ros = roster(ix, computed.overrides, team.team, team.season)
+  const ros = roster(ix, computed.timeline.overrides, team.team, team.season)
     .map((x) => ({ ...x, r: ix.ds.rows[x.i], hit: cap.capHit(ix.ds.rows[x.i][0], team.season) }))
     .sort((a, b) => b.r[4] - a.r[4]);
   const seasonRes = computed.timeline.seasons.find((x) => x.season === team.season)!;
