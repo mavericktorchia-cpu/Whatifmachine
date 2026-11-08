@@ -25,8 +25,15 @@ fields, cap commitments and simulated **Stanley Cup odds** for every franchise t
 
 ## Live site
 
-Deployed to GitHub Pages by `.github/workflows/pages.yml` on every push:
-**https://mavericktorchia-cpu.github.io/Whatifmachine/** (one-time setup: repo *Settings → Pages → Source: GitHub Actions*).
+**https://whatifmachine.ca** (also https://mavericktorchia-cpu.github.io/Whatifmachine/, which redirects there
+once the custom domain is set). `.github/workflows/pages.yml` deploys on every push.
+
+Custom-domain setup (one time):
+- **DNS at the registrar:** apex `A` records `185.199.108.153`, `185.199.109.153`, `185.199.110.153` and
+  `185.199.111.153`; `AAAA` records `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153`
+  and `2606:50c0:8003::153`; `www` as a `CNAME` to `mavericktorchia-cpu.github.io`.
+- **GitHub:** repo *Settings → Pages → Custom domain*: `whatifmachine.ca`, then *Enforce HTTPS* once the
+  certificate is issued.
 
 ## Run it
 
