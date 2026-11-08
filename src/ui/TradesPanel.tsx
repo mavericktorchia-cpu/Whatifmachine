@@ -3,8 +3,9 @@ import { TRADES } from "../data/trades";
 import { seasonForDate } from "../data/league";
 import type { DataIndex } from "../engine/dataIndex";
 import { resolveTrade, type Change, type Tenure } from "../engine/scenario";
-import { teamName } from "./format";
+import { bankedWar, teamName } from "./format";
 import { TenureToggle } from "./ScenarioList";
+import { LedgerTrades } from "./LedgerTrades";
 
 interface Props {
   ix: DataIndex;
@@ -14,26 +15,7 @@ interface Props {
   onRemove: (i: number) => void;
 }
 
-/** WAR each side actually banked from the trade: seasons the player spent with the receiving club. */
-function bankedWar(ix: DataIndex, pid: number | null, team: string, fromSeason: number): number {
-  if (pid === null) return 0;
-  const fr = ix.ds.teams[team].franchise;
-  let w = 0;
-  let started = false;
-  for (const i of ix.rowsByPlayer.get(pid) ?? []) {
-    const r = ix.ds.rows[i];
-    if (r[1] < fromSeason) continue;
-    const mine = ix.ds.teams[r[2]].franchise === fr;
-    if (mine) {
-      started = true;
-      w += r[4] / 100;
-    } else if (started) break;
-  }
-  return w;
-}
-
-export function TradesPanel({ ix, changes, onAdd, onRemove }: Props) {
-  const [tenure, setTenure] = useState<Tenure>("mirror");
+function LandmarkTrades({ ix, changes, onAdd, onRemove, tenure, setTenure }: Props & { tenure: Tenure; setTenure: (t: Tenure) => void }) {
   const [q, setQ] = useState("");
   const resolved = useMemo(
     () =>
@@ -54,7 +36,7 @@ export function TradesPanel({ ix, changes, onAdd, onRemove }: Props) {
   });
 
   return (
-    <div className="panel">
+    <div className="panel-inner">
       <div className="panel-controls">
         <input className="search" placeholder="Search trades, teams or players…" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="row-between small">
@@ -115,6 +97,24 @@ export function TradesPanel({ ix, changes, onAdd, onRemove }: Props) {
       })}
       {!filtered.length && <p className="muted">No trades match “{q}”.</p>}
       <p className="muted small">The NHL publishes no machine-readable trade ledger, so landmark trades are curated. Use “Custom move” for any other transaction.</p>
+    </div>
+  );
+}
+
+export function TradesPanel(props: Props) {
+  const [mode, setMode] = useState<"landmark" | "all">("landmark");
+  const [tenure, setTenure] = useState<Tenure>("mirror");
+  return (
+    <div className="panel">
+      <div className="seg wide" role="radiogroup" aria-label="Which trades">
+        <button role="radio" aria-checked={mode === "landmark"} className={mode === "landmark" ? "on" : ""} onClick={() => setMode("landmark")}>
+          Landmark trades
+        </button>
+        <button role="radio" aria-checked={mode === "all"} className={mode === "all" ? "on" : ""} onClick={() => setMode("all")}>
+          All {props.ix.ds.trades.length.toLocaleString()} trades
+        </button>
+      </div>
+      {mode === "landmark" ? <LandmarkTrades {...props} tenure={tenure} setTenure={setTenure} /> : <LedgerTrades {...props} tenure={tenure} setTenure={setTenure} />}
     </div>
   );
 }

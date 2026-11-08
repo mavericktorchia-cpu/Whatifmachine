@@ -810,3 +810,41 @@ input.meter {
 .tabs button {
   font-size: 13px;
 }
+
+.panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.seg.wide {
+  display: flex;
+}
+.seg.wide button {
+  flex: 1;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.filters select {
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 13px;
+}
+.filters select:first-child {
+  flex: 1 1 140px;
+}
+.trade.compact {
+  padding: 10px 12px;
+}
+.trade.compact h3 {
+  font-size: 14px;
+}
+.trade.compact .sides {
+  margin-bottom: 6px;
+}

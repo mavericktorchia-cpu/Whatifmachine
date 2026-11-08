@@ -2,6 +2,7 @@ import { TRADES, type TradeDef } from "../data/trades";
 import { seasonForDate, seasonLabel } from "../data/league";
 import { projectHealthy, type Extra } from "./injuries";
 import { abbrFor, franchiseOf, resolvePlayer, type DataIndex } from "./dataIndex";
+import type { LedgerTrade } from "./types";
 
 /**
  * Tenure model — how long a player would have stayed with his original team in the alternate timeline:
@@ -44,6 +45,70 @@ export interface AppliedChange {
 
 export function tradeById(id: string): TradeDef | undefined {
   return TRADES.find((t) => t.id === id);
+}
+
+/** A trade from either source, normalised: each side lists what that team received. */
+export interface AnyTrade {
+  id: string;
+  date: string;
+  landmark: TradeDef | null;
+  sides: { team: string; assets: (ResolvedAsset & { kind: "p" | "d" | "o" })[] }[];
+}
+
+const ledgerMemo = new WeakMap<DataIndex, Map<string, LedgerTrade>>();
+export function ledgerById(ix: DataIndex, id: string): LedgerTrade | undefined {
+  let m = ledgerMemo.get(ix);
+  if (!m) ledgerMemo.set(ix, (m = new Map((ix.ds.trades ?? []).map((t) => [t.i, t]))));
+  return m.get(id);
+}
+
+/** The landmark (curated) trade matching a ledger trade: same two clubs within two days. */
+export function landmarkFor(ix: DataIndex, t: LedgerTrade): TradeDef | null {
+  const day = (d: string) => Date.parse(d + "T12:00:00Z") / 86400000;
+  const frs = new Set(t.t.map((x) => franchiseOf(ix, x)));
+  return (
+    TRADES.find((c) => Math.abs(day(c.date) - day(t.d)) <= 2 && c.sides.every((s) => frs.has(franchiseOf(ix, s.team))) && frs.size === c.sides.length) ?? null
+  );
+}
+
+export function anyTrade(ix: DataIndex, id: string): AnyTrade | null {
+  const c = tradeById(id);
+  if (c) {
+    return {
+      id,
+      date: c.date,
+      landmark: c,
+      sides: resolveTrade(ix, c).map((s) => ({ team: s.team, assets: s.assets.map((a) => ({ ...a, kind: a.via ? ("d" as const) : ("p" as const) })) })),
+    };
+  }
+  const t = ledgerById(ix, id);
+  if (!t) return null;
+  return {
+    id,
+    date: t.d,
+    landmark: landmarkFor(ix, t),
+    sides: t.t.map((team) => ({
+      team,
+      assets: t.a
+        .filter((a) => a[1] === team)
+        .map((a) => ({ name: a[3] ? (ix.ds.players[a[3]]?.n ?? a[2]) : a[2], via: a[4] === "d" ? a[2] : undefined, pid: a[3] || null, kind: a[4] })),
+    })),
+  };
+}
+
+/** Short title for a ledger trade: the biggest names on each side. */
+export function tradeTitle(ix: DataIndex, t: AnyTrade, careerWar?: Map<number, number>): string {
+  if (t.landmark) return t.landmark.title;
+  const top = (s: AnyTrade["sides"][number]) =>
+    [...s.assets]
+      .filter((a) => a.pid)
+      .sort((a, b) => (careerWar?.get(b.pid!) ?? 0) - (careerWar?.get(a.pid!) ?? 0))
+      .slice(0, 2)
+      .map((a) => ix.ds.players[a.pid!]?.n.split(" ").slice(1).join(" ") || a.name);
+  const [x, y] = t.sides;
+  const a = x ? top(x) : [];
+  const b = y ? top(y) : [];
+  return `${b.join(", ") || "assets"} to ${x?.team ?? "?"}${y ? ` for ${a.join(", ") || "assets"}` : ""}`;
 }
 
 export function resolveTrade(ix: DataIndex, t: TradeDef): { team: string; assets: ResolvedAsset[] }[] {
@@ -136,17 +201,18 @@ export function applyChange(ix: DataIndex, ov: Overrides, change: Change): Appli
   }
 
   if (change.kind === "trade") {
-    const t = tradeById(change.tradeId);
+    const t = anyTrade(ix, change.tradeId);
     if (!t) return { change, title: `Unknown trade ${change.tradeId}`, moves, warnings: ["unknown trade"] };
     const season = seasonForDate(t.date);
-    const sides = resolveTrade(ix, t);
+    const sides = t.sides;
     sides.forEach((side, k) => {
+      if (sides.length !== 2) return;
       const giver = sides[1 - k].team; // the team that sent these assets away
       const giverFr = franchiseOf(ix, giver);
       const receiverFr = franchiseOf(ix, side.team);
       for (const a of side.assets) {
         if (a.pid === null) {
-          warnings.push(`Could not find ${a.name} in NHL data`);
+          if (a.kind === "p" && t.landmark && t.landmark.id === t.id) warnings.push(`Could not find ${a.name} in NHL data`);
           continue;
         }
         // A traded player must still belong to the giver in this timeline (earlier changes may have
@@ -160,7 +226,7 @@ export function applyChange(ix: DataIndex, ov: Overrides, change: Change): Appli
         moves.push(...reassign(ix, ov, run, giverFr, a.pid, warnings));
       }
     });
-    return { change, title: `Undo: ${t.title}`, moves, warnings };
+    return { change, title: `Undo: ${t.landmark?.id === t.id ? t.landmark.title : `${tradeTitle(ix, t)} (${t.date})`}`, moves, warnings };
   }
 
   if (change.kind === "draft") {

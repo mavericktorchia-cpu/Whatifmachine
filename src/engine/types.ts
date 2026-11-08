@@ -51,6 +51,17 @@ export interface GmTenure {
   to: string | null;
 }
 
+/** One asset in a ledger trade: [from abbrev, to abbrev, label, playerId (0 = none), kind]. Kind: p player, d pick, o other. */
+export type LedgerAsset = [string, string, string, number, "p" | "d" | "o"];
+
+/** A trade from the scraped ledger, with players resolved to ids. */
+export interface LedgerTrade {
+  i: string; // trade id
+  d: string; // YYYY-MM-DD
+  t: string[]; // team abbrevs involved
+  a: LedgerAsset[];
+}
+
 export interface Dataset {
   generatedAt: string;
   seasons: SeasonInfo[];
@@ -60,4 +71,5 @@ export interface Dataset {
   rows: PlayerSeasonRow[];
   draft: DraftRow[];
   gms: GmTenure[];
+  trades: LedgerTrade[];
 }

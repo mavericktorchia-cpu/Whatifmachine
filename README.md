@@ -4,6 +4,9 @@ An interactive "what if?" machine for NHL history. Undo a landmark trade, redo a
 career-altering injury, and the machine replays every season from **1966-67 to 2025-26**. It recomputes roster WAR, standings, playoff
 fields, cap commitments and simulated **Stanley Cup odds** for every franchise the change touches.
 
+- **Every trade since 1966**: about 5,000 trades from a scraped ledger (nhltradetracker.com through
+  March 2025, capwages.com after), searchable by player, team and era, sortable by how lopsided they were.
+  Players resolve to NHL ids, and picks resolve to the player eventually drafted with them.
 - **Landmark trades**: 23 curated deals (Gretzky, Lindros, Hasek, Roy, Kessel, Seguin, Hall-for-Larsson,
   Subban-for-Weber, Eichel, Tkachuk…). Undo one and every player goes back to the club that traded him,
   including players later drafted with traded picks.
@@ -61,6 +64,19 @@ npm run data       # data:fetch (cached in ./data-raw) + data:build
 | `api-web.nhle.com/v1/playoff-series/carousel` | real Stanley Cup champions |
 | `api-web.nhle.com/v1/player/{id}/landing` | per-team splits for players traded mid-season |
 | `records.nhl.com/site/api/draft` | every draft pick, including pick-trade history |
+| `records.nhl.com/site/api/franchise-detail` | general manager tenures |
+| `data-sources/trades/*.csv` | trade ledger scraped from nhltradetracker.com and capwages.com |
+
+The trade ledger is converted by `scripts/trade-ledger.ts`. Teams are matched by name to a franchise and
+season, and players by name, falling back to last name among each club's players around the trade date
+(this catches "Steven"/"Steve" Reinprecht, "Ed"/"Eddie" Olczyk and the like). Picks resolve through:
+- the player named in the pick ("1995 1st round pick (#13-Jean-Sebastien Giguere)", with typo
+  tolerance);
+- the original owner ("2025 3rd round pick (TOR)");
+- the NHL draft records' pick history for bare picks ("2018 2nd round pick": the pick of that year and
+  round that passed between those two clubs).
+
+About 91% of traded players resolve. Most of the rest never played in the NHL.
 
 Relocated franchises are tracked by franchise ID (Quebec→Colorado, Hartford→Carolina, Winnipeg→Phoenix→Arizona,
 Minnesota→Dallas, Atlanta→Winnipeg), so a player "sent back" to the Nordiques in 1996 lands on the Avalanche.
@@ -152,8 +168,9 @@ overridden in the team view, and overrides travel with the share link.
 ## Limitations
 
 - sWAR is an approximation. Use it to compare players, not as an official figure.
-- Trades are curated, because the NHL has no public trade ledger. Picks that never produced an NHL player,
-  cash and future considerations are listed but carry no value.
+- The trade ledger is third-party scraped data and may contain errors. Picks that never produced an NHL
+  player, cash and future considerations are listed but carry no value. Trades before 1966-67 aren't
+  included.
 - League responses are averages, not predictions of specific moves. Free-agent signings, cap-forced
   moves and player development in a different environment are not modelled.
 - Coverage starts in 1966-67, the last Original Six season. WHA seasons aren't included, and the 2004-05

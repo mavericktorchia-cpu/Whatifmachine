@@ -103,7 +103,7 @@ export function App() {
           <nav className="tabs" role="tablist">
             {(
               [
-                ["trades", "Landmark trades"],
+                ["trades", "Trades"],
                 ["draft", "Redo a draft"],
                 ["injury", "Undo an injury"],
                 ["custom", "Custom move"],

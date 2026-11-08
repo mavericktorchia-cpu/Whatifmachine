@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { computeSeasonWar, goalsPerWin, type GoalieLine, type SkaterLine, type TeamLine } from "../src/engine/war";
 import { CAP_CEILING, playoffFormat, seasonLabel } from "../src/data/league";
+import { buildLedger } from "./trade-ledger";
 import type { Dataset, DraftRow, GmTenure, PlayerInfo, PlayerSeasonRow, SeasonInfo, TeamSeason } from "../src/engine/types";
 
 const RAW = join(process.cwd(), "data-raw");
@@ -218,7 +219,16 @@ for (const f of read<{ data: { id: number; generalManagerHistory: string | null 
 }
 
 if (gmFailures.length) throw new Error(`could not parse GM tenures:\n${gmFailures.join("\n")}`);
-const ds: Dataset = { generatedAt: new Date().toISOString(), seasons, teams: teamInfo, standings, players, rows, draft, gms };
+const ds: Dataset = { generatedAt: new Date().toISOString(), seasons, teams: teamInfo, standings, players, rows, draft, gms, trades: [] };
+const ledger = buildLedger(ds);
+ds.trades = ledger.trades;
+const ls = ledger.stats;
+console.log(
+  `trade ledger: ${ls.trades} trades kept, ${ls.playersResolved}/${ls.players} players and ${ls.picksResolved}/${ls.picks} picks resolved` +
+    (ls.skippedTeams.size ? `; unmatched teams: ${[...ls.skippedTeams.keys()].join(", ")}` : ""),
+);
+const topMissing = [...ls.unresolvedPlayers.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+if (topMissing.length) console.log(`  unresolved players (sample): ${topMissing.map(([n, c]) => `${n}×${c}`).join(", ")}`);
 mkdirSync(join(process.cwd(), "public", "data"), { recursive: true });
 const out = join(process.cwd(), "public", "data", "nhl.json");
 writeFileSync(out, JSON.stringify(ds));
