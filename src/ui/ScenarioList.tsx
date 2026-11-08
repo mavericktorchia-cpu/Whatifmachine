@@ -54,9 +54,13 @@ export function ScenarioList({ changes, applied, onRemove, onReplace, onClear }:
                 </button>
               </div>
               <div className="muted small">
-                {c.kind === "move" && a ? a.moves.map((m) => `${m.from} → ${m.to ?? "out"} (${m.seasons.length} season${m.seasons.length > 1 ? "s" : ""})`).join(", ") : `${moved} player${moved === 1 ? "" : "s"} rerouted`}
+                {c.kind === "injury" && a
+                  ? `+${(a.extras ?? []).reduce((x, e) => x + e.war, 0).toFixed(1)} WAR and +${(a.extras ?? []).reduce((x, e) => x + e.gp, 0)} games over ${new Set((a.extras ?? []).map((e) => e.season)).size} seasons`
+                  : c.kind === "move" && a
+                    ? a.moves.map((m) => `${m.from} → ${m.to ?? "out"} (${m.seasons.length} season${m.seasons.length > 1 ? "s" : ""})`).join(", ")
+                    : `${moved} player${moved === 1 ? "" : "s"} rerouted`}
               </div>
-              {c.kind !== "move" && <TenureToggle value={c.tenure} onChange={(t) => onReplace(i, { ...c, tenure: t })} />}
+              {(c.kind === "trade" || c.kind === "draft") && <TenureToggle value={c.tenure} onChange={(t) => onReplace(i, { ...c, tenure: t })} />}
               {a?.warnings.map((w) => (
                 <div key={w} className="warn small">
                   ⚠ {w}

@@ -54,9 +54,10 @@ export function ResponsesPanel({ value, onChange, timeline }: Props) {
       </div>
       {timeline && (
         <p className="muted small">
-          Measured from 1979–2026 mid-season moves, each fifth of the standings nets, best to worst:{" "}
+          Measured from every mid-season move since 1966, each fifth of the standings nets, best to worst:{" "}
           {timeline.deadline.curve.map(([, w]) => signed(w, 2)).join(" · ")} WAR. A #1 pick is worth {timeline.draftValue.value[1].toFixed(1)} WAR to the team that makes
-          it; #10, {timeline.draftValue.value[10].toFixed(1)}; #30, {timeline.draftValue.value[30].toFixed(1)}.
+          it; #10, {timeline.draftValue.value[10].toFixed(1)}; #30, {timeline.draftValue.value[30].toFixed(1)}. Draft and deadline responses are scaled by each GM's
+          activity meter, which you can adjust in the team view.
         </p>
       )}
     </details>

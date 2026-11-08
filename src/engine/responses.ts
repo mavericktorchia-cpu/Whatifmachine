@@ -6,7 +6,7 @@
  *  - Depth displacement: an arriving player takes games from the team's depth players at his position
  *    rather than from a replacement-level player; a departing player's games go to them.
  *  - Deadline behaviour: bad teams sell during the season and good teams buy a little. When a team's standing
- *    moves, it trades like a team at its new standing. The effect is measured from 46 seasons of mid-season moves.
+ *    moves, it trades like a team at its new standing. The effect is measured from every mid-season move since 1966.
  */
 import { franchiseOf, abbrFor, type DataIndex } from "./dataIndex";
 
@@ -57,20 +57,22 @@ export function depthRate(ix: DataIndex, team: string, season: number, group: st
   return rate;
 }
 
+/** Games a player adds to (or removes from) a team's lineup at his position. */
+export interface LineupGames {
+  pos: string;
+  gp: number;
+}
+
+export const rowGames = (ix: DataIndex, i: number): LineupGames => ({ pos: ix.ds.players[ix.ds.rows[i][0]]?.pos ?? "F", gp: ix.ds.rows[i][3] });
+
 /**
- * Depth correction (WAR) for one team-season, given the rows that arrived and departed.
+ * Depth correction (WAR) for one team-season, given the games that arrived and departed.
  * Arrivals push depth players out (−rate × games); departures open games for them (+rate × games).
  */
-export function depthCorrection(ix: DataIndex, team: string, season: number, arrived: number[], departed: number[]): number {
+export function depthCorrection(ix: DataIndex, team: string, season: number, arrived: LineupGames[], departed: LineupGames[]): number {
   let c = 0;
-  for (const i of arrived) {
-    const r = ix.ds.rows[i];
-    c -= depthRate(ix, team, season, posGroup(ix.ds.players[r[0]]?.pos)) * r[3];
-  }
-  for (const i of departed) {
-    const r = ix.ds.rows[i];
-    c += depthRate(ix, team, season, posGroup(ix.ds.players[r[0]]?.pos)) * r[3];
-  }
+  for (const g of arrived) c -= depthRate(ix, team, season, posGroup(g.pos)) * g.gp;
+  for (const g of departed) c += depthRate(ix, team, season, posGroup(g.pos)) * g.gp;
   return c;
 }
 
@@ -89,32 +91,41 @@ export const DEADLINE_BINS = 5;
  * into fifths of the league by final points%, and the curve holds each fifth's average net WAR
  * (good teams net a little, bad teams shed the most).
  */
+const netMemo = new WeakMap<DataIndex, Map<string, number>>();
+
+/**
+ * Net in-season WAR per team-season (`${team}|${season}`): for every player who changed teams during
+ * a season, the WAR he produced after the move counts for the buyer and against the seller.
+ */
+export function inSeasonNet(ix: DataIndex): Map<string, number> {
+  const cached = netMemo.get(ix);
+  if (cached) return cached;
+  const net = new Map<string, number>();
+  for (const list of ix.rowsByPlayer.values()) {
+    for (let k = 1; k < list.length; k++) {
+      const prev = ix.ds.rows[list[k - 1]];
+      const cur = ix.ds.rows[list[k]];
+      if (prev[1] !== cur[1] || prev[2] === cur[2]) continue;
+      const w = cur[4] / 100;
+      net.set(`${cur[2]}|${cur[1]}`, (net.get(`${cur[2]}|${cur[1]}`) ?? 0) + w);
+      net.set(`${prev[2]}|${prev[1]}`, (net.get(`${prev[2]}|${prev[1]}`) ?? 0) - w);
+    }
+  }
+  netMemo.set(ix, net);
+  return net;
+}
+
 export function deadlineModel(ix: DataIndex): DeadlineModel {
   const cached = deadlineMemo.get(ix);
   if (cached) return cached;
+  const net = inSeasonNet(ix);
   const sums = Array.from({ length: DEADLINE_BINS }, () => ({ n: 0, net: 0 }));
   for (const s of ix.ds.seasons) {
-    const net = new Map<string, number>();
-    const seen = new Set<number>();
-    for (const t of ix.standings.get(s.id) ?? []) {
-      for (const i of ix.rowsByTeamSeason.get(`${t.t}|${s.id}`) ?? []) {
-        const pid = ix.ds.rows[i][0];
-        if (seen.has(pid)) continue;
-        seen.add(pid);
-        const mine = (ix.rowsByPlayer.get(pid) ?? []).filter((j) => ix.ds.rows[j][1] === s.id).map((j) => ix.ds.rows[j]);
-        for (let k = 1; k < mine.length; k++) {
-          if (mine[k - 1][2] === mine[k][2]) continue;
-          const w = mine[k][4] / 100;
-          net.set(mine[k][2], (net.get(mine[k][2]) ?? 0) + w);
-          net.set(mine[k - 1][2], (net.get(mine[k - 1][2]) ?? 0) - w);
-        }
-      }
-    }
     const st = [...(ix.standings.get(s.id) ?? [])].sort((a, b) => b.pts / b.gp - a.pts / a.gp);
     st.forEach((t, i) => {
       const b = Math.min(DEADLINE_BINS - 1, Math.floor((i / st.length) * DEADLINE_BINS));
       sums[b].n++;
-      sums[b].net += net.get(t.t) ?? 0;
+      sums[b].net += net.get(`${t.t}|${s.id}`) ?? 0;
     });
   }
   const curve = sums.map((b, i) => [(i + 0.5) / DEADLINE_BINS, b.n ? b.net / b.n : 0] as [number, number]);

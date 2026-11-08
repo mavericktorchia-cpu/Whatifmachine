@@ -35,14 +35,20 @@ export const LEAGUE_MIN: Record<number, number> = {
 };
 
 /**
- * Playoff format by season. The engine models four bracket shapes:
+ * Playoff format by season. The engine models these bracket shapes:
+ *  - overall4:    Original Six, top four (1966-67)
+ *  - division4:   top four per division, division brackets (1967-74 East/West; 1981-93; 2020-21)
+ *  - bye12:       top three per division; division winners get byes while the other eight play a
+ *                 best-of-three preliminary round, then everyone is re-seeded (1974-79)
  *  - overall16:   16 teams seeded league-wide, re-seeded each round (1979-81)
- *  - division4:   top four per division, division brackets (1981-93; 2020-21 realigned divisions)
  *  - conference8: top eight per conference, division winners seeded first, re-seeded (1993-2013;
  *                 the 2020 24-team bubble is approximated with this format)
  *  - wildcard:    top three per division + two wild cards per conference (2013-14 onward)
  */
 export function playoffFormat(season: number): PlayoffFormat {
+  if (season <= 19661967) return "overall4";
+  if (season <= 19731974) return "division4"; // East and West divisions, top four each
+  if (season <= 19781979) return "bye12";
   if (season <= 19801981) return "overall16";
   if (season <= 19921993 || season === 20202021) return "division4";
   if (season <= 20122013 || season === 20192020) return "conference8";

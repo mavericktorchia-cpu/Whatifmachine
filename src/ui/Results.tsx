@@ -4,6 +4,7 @@ import type { DataIndex } from "../engine/dataIndex";
 import { roster, type ResponseNote, type TeamSeasonResult, type WarComponents } from "../engine/timeline";
 import type { Computed } from "./App";
 import { FranchiseChart } from "./Chart";
+import { GmMeters } from "./GmMeters";
 import { fmtSeason, money, pct, playerName, signed, teamName, tone } from "./format";
 
 interface Props {
@@ -12,9 +13,11 @@ interface Props {
   computed: Computed;
   busy: boolean;
   hasChanges: boolean;
+  gmMeters: Record<string, number>;
+  onGmMeter: (name: string, meter: number | null) => void;
 }
 
-export function Results({ ix, cap, computed, busy, hasChanges }: Props) {
+export function Results({ ix, cap, computed, busy, hasChanges, gmMeters, onGmMeter }: Props) {
   const { summary, timeline } = computed;
   const [fr, setFr] = useState<number | null>(null);
   const [season, setSeason] = useState<number | null>(null);
@@ -113,6 +116,7 @@ export function Results({ ix, cap, computed, busy, hasChanges }: Props) {
             </h2>
           </div>
           <FranchiseChart rows={rows} selected={season} onSelect={setSeason} />
+          <GmMeters ix={ix} franchise={focus.franchise} rows={changedRows} overrides={gmMeters} onChange={onGmMeter} />
           <DraftNotes ix={ix} notes={computed.timeline.notes.filter((n) => ix.ds.teams[n.team]?.franchise === focus.franchise)} />
           <div className="scroll-x">
             <table className="tbl seasons">
@@ -123,6 +127,7 @@ export function Results({ ix, cap, computed, busy, hasChanges }: Props) {
                   <th className="num">Points</th>
                   <th className="num">Rank</th>
                   <th>Playoffs</th>
+                  <th>GM</th>
                   <th className="num">Cup odds</th>
                   <th className="num" title="Change in cap commitments (cap era)">Δ Cap</th>
                   <th>Moves</th>
@@ -212,6 +217,9 @@ function SeasonRow({ ix, r, selected, onSelect, champ }: { ix: DataIndex; r: Tea
           {playoffLabel(r.madePlayoffs)} → {playoffLabel(r.altMadePlayoffs)}
         </span>
       </td>
+      <td className="small">
+        {r.gm ?? "—"} {r.gm && <span className={`pill sm ${r.gmMeter >= 60 ? "good" : r.gmMeter < 40 ? "bad" : ""}`}>{r.gmMeter}</span>}
+      </td>
       <td className="num">
         {pct(r.baseCupOdds)} → <strong className={tone(r.altCupOdds - r.baseCupOdds, 0.003)}>{pct(r.altCupOdds)}</strong>
         {r.wonCup && <span title="Won the Cup in real history"> 🏆</span>}
@@ -220,9 +228,14 @@ function SeasonRow({ ix, r, selected, onSelect, champ }: { ix: DataIndex; r: Tea
       </td>
       <td className={`num ${r.capDelta ? tone(-r.capDelta, 0.05) : "muted"}`}>{r.capDelta === null ? "n/a" : s.capCeiling ? signed(r.capDelta, 2) : ""}</td>
       <td className="small">
-        {r.arrivals.map((p) => (
+        {r.arrivals.filter((p) => !r.healthy.includes(p)).map((p) => (
           <span key={p} className="chip in">
             +{playerName(ix, p)}
+          </span>
+        ))}
+        {r.healthy.map((p) => (
+          <span key={`h${p}`} className="chip heal">
+            ✚{playerName(ix, p)}
           </span>
         ))}
         {r.departures.map((p) => (
@@ -241,7 +254,8 @@ function SeasonDetail({ ix, cap, computed, team }: { ix: DataIndex; cap: CapMode
     .map((x) => ({ ...x, r: ix.ds.rows[x.i], hit: cap.capHit(ix.ds.rows[x.i][0], team.season) }))
     .sort((a, b) => b.r[4] - a.r[4]);
   const seasonRes = computed.timeline.seasons.find((x) => x.season === team.season)!;
-  const groupKey = s.format === "overall16" ? null : s.format === "division4" ? "div" : "conf";
+  const groupKey = s.format === "overall16" || s.format === "overall4" ? null : s.format === "division4" || s.format === "bye12" ? "div" : "conf";
+  const healthy = computed.applied.flatMap((a) => a.extras ?? []).filter((e) => e.team === team.team && e.season === team.season);
   const myGroup = groupKey ? ix.standings.get(team.season)!.find((t) => t.t === team.team)?.[groupKey] : null;
   const table = seasonRes.teams
     .filter((t) => !groupKey || ix.standings.get(team.season)!.find((x) => x.t === t.team)?.[groupKey] === myGroup)
@@ -270,6 +284,17 @@ function SeasonDetail({ ix, cap, computed, team }: { ix: DataIndex; cap: CapMode
               </tr>
             </thead>
             <tbody>
+              {healthy.map((e) => (
+                <tr key={`h${e.pid}`} className="arrived">
+                  <td>
+                    <span className="chip heal">HEALTHY</span> {ix.ds.players[e.pid]?.n} <span className="muted small">extra games</span>
+                  </td>
+                  <td className="num">+{e.gp}</td>
+                  <td className="num muted">—</td>
+                  <td className="num up">+{e.war.toFixed(2)}</td>
+                  {s.capCeiling && <td className="num muted">—</td>}
+                </tr>
+              ))}
               {ros.map((x) => {
                 const p = ix.ds.players[x.r[0]];
                 return (

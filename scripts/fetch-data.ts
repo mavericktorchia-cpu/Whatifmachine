@@ -10,7 +10,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const RAW = join(process.cwd(), "data-raw");
-export const FIRST_SEASON = 19791980;
+export const FIRST_SEASON = 19661967; // last Original Six season (all of Bobby Orr's career)
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -47,10 +47,12 @@ async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<void>) {
 }
 
 async function main() {
-  for (const d of ["", "standings", "skaters", "goalies", "playoffs", "landing"]) mkdirSync(join(RAW, d), { recursive: true });
+  for (const d of ["", "standings", "skaters", "goalies", "playoffs", "landing", "bios"]) mkdirSync(join(RAW, d), { recursive: true });
 
   await cached("teams.json", "https://api.nhle.com/stats/rest/en/team");
   await cached("draft.json", "https://records.nhl.com/site/api/draft?limit=-1");
+  // Franchise histories, including every general manager's tenure with exact dates.
+  await cached("franchise-detail.json", "https://records.nhl.com/site/api/franchise-detail?limit=-1");
   const ss = (await getJson("https://api-web.nhle.com/v1/standings-season")) as {
     seasons: { id: number; standingsEnd: string }[];
   };
@@ -66,6 +68,8 @@ async function main() {
     await cached(`skaters/${s.id}.json`, `https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&limit=-1&${q}`);
     await cached(`goalies/${s.id}.json`, `https://api.nhle.com/stats/rest/en/goalie/summary?isAggregate=false&isGame=false&limit=-1&${q}`);
     await cached(`playoffs/${s.id}.json`, `https://api-web.nhle.com/v1/playoff-series/carousel/${s.id}/`);
+    await cached(`bios/skaters-${s.id}.json`, `https://api.nhle.com/stats/rest/en/skater/bios?isAggregate=false&isGame=false&limit=-1&${q}`);
+    await cached(`bios/goalies-${s.id}.json`, `https://api.nhle.com/stats/rest/en/goalie/bios?isAggregate=false&isGame=false&limit=-1&${q}`);
   });
 
   // Players who changed teams mid-season need per-team splits, which only the landing page has.

@@ -1,6 +1,6 @@
 /** Compact dataset shipped to the browser (public/data/nhl.json). Built by scripts/build-data.ts. */
 
-export type PlayoffFormat = "overall16" | "division4" | "conference8" | "wildcard";
+export type PlayoffFormat = "overall4" | "bye12" | "overall16" | "division4" | "conference8" | "wildcard";
 
 export interface SeasonInfo {
   id: number; // e.g. 19881989
@@ -32,6 +32,7 @@ export interface TeamSeason {
 export interface PlayerInfo {
   n: string; // full name
   pos: string; // C L R D G
+  b?: number; // birth year
   /** [draftYear, overall, round, draftedBy abbrev] */
   dr?: [number, number, number, string];
 }
@@ -42,6 +43,14 @@ export type PlayerSeasonRow = [number, number, string, number, number, number];
 /** [year, round, overall, team, playerId (0 = never reached the NHL / unknown), name, pos, pickHistory] */
 export type DraftRow = [number, number, number, string, number, string, string, string];
 
+/** A general manager's tenure with one franchise. Dates are YYYY-MM-DD; `to` is null for the incumbent. */
+export interface GmTenure {
+  name: string;
+  franchise: number;
+  from: string;
+  to: string | null;
+}
+
 export interface Dataset {
   generatedAt: string;
   seasons: SeasonInfo[];
@@ -50,4 +59,5 @@ export interface Dataset {
   players: Record<string, PlayerInfo>;
   rows: PlayerSeasonRow[];
   draft: DraftRow[];
+  gms: GmTenure[];
 }

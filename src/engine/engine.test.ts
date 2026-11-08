@@ -14,8 +14,8 @@ const ix = loadIndex();
 const cap = buildCapModel(ix);
 
 describe("dataset", () => {
-  it("covers 1979-80 through the latest completed season with a champion for each", () => {
-    expect(ix.seasonIds[0]).toBe(19791980);
+  it("covers 1966-67 through the latest completed season with a champion for each", () => {
+    expect(ix.seasonIds[0]).toBe(19661967);
     expect(ix.seasonIds).not.toContain(20042005); // lockout
     for (const s of ix.ds.seasons) expect(s.champion, s.label).toBeTruthy();
     expect(ix.season.get(19881989)!.champion).toBe("CGY");
@@ -157,11 +157,11 @@ describe("playoff model", () => {
   });
 
   it("builds a 16-team field in every format with the right qualifiers", () => {
-    for (const sid of [19801981, 19881989, 19981999, 20152016, 20202021, 20252026]) {
+    for (const sid of [19661967, 19701971, 19761977, 19801981, 19881989, 19981999, 20152016, 20202021, 20252026]) {
       const st = ix.standings.get(sid)!;
       const teams: PlayoffTeam[] = st.map((t) => ({ t: t.t, conf: t.conf, div: t.div, pts: t.pts, w: t.w, rating: (t.gf - t.ga) / t.gp }));
       const f = buildField(playoffFormat(sid), teams);
-      expect(f.qualified.size, String(sid)).toBe(16);
+      expect(f.qualified.size, String(sid)).toBe(sid === 19661967 ? 4 : sid <= 19731974 ? 8 : sid <= 19781979 ? 12 : 16);
       const champ = f.run(mulberry32(7));
       expect(f.qualified.has(champ)).toBe(true);
     }

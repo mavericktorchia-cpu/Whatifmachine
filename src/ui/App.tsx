@@ -6,6 +6,7 @@ import { computeTimeline, summarize, type FranchiseSummary, type Timeline } from
 import type { Dataset } from "../engine/types";
 import { CustomPanel } from "./CustomPanel";
 import { DraftPanel } from "./DraftPanel";
+import { InjuryPanel } from "./InjuryPanel";
 import { Results } from "./Results";
 import { ScenarioList } from "./ScenarioList";
 import { ResponsesPanel } from "./ResponsesPanel";
@@ -20,7 +21,7 @@ export interface Computed {
   summary: FranchiseSummary[];
 }
 
-type Tab = "trades" | "draft" | "custom";
+type Tab = "trades" | "draft" | "injury" | "custom";
 
 export function App() {
   const [ix, setIx] = useState<DataIndex | null>(null);
@@ -29,6 +30,7 @@ export function App() {
   const [changes, setChanges] = useState<Change[]>(initial.changes);
   const [seed, setSeed] = useState(initial.seed);
   const [responses, setResponses] = useState<ResponseOptions>(initial.responses);
+  const [gmMeters, setGmMeters] = useState<Record<string, number>>(initial.gmMeters);
   const [tab, setTab] = useState<Tab>("trades");
   const [computed, setComputed] = useState<Computed | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,25 +54,25 @@ export function App() {
   }, [ix]);
 
   useEffect(() => {
-    writeScenario(changes, seed, responses);
+    writeScenario({ changes, seed, responses, gmMeters });
     if (!ix || !cap) return;
     setBusy(true);
     // Let the "simulating" state paint before the (synchronous) Monte Carlo runs.
     const h = window.setTimeout(() => {
-      const { overrides, applied } = applyAll(ix, changes);
-      const timeline = computeTimeline(ix, overrides, cap, { seed, responses });
+      const { overrides, extras, applied } = applyAll(ix, changes);
+      const timeline = computeTimeline(ix, overrides, cap, { seed, responses, extras, gmMeters });
       setComputed({ overrides, applied, timeline, summary: summarize(ix, timeline) });
       setBusy(false);
     }, 20);
     return () => window.clearTimeout(h);
-  }, [ix, cap, changes, seed, responses]);
+  }, [ix, cap, changes, seed, responses, gmMeters]);
 
   const add = (c: Change) => setChanges((cs) => [...cs, c]);
   const remove = (k: number) => setChanges((cs) => cs.filter((_, i) => i !== k));
   const replace = (k: number, c: Change) => setChanges((cs) => cs.map((x, i) => (i === k ? c : x)));
 
   if (error) return <div className="splash error">{error}</div>;
-  if (!ix || !cap) return <div className="splash">Loading 46 seasons of NHL history…</div>;
+  if (!ix || !cap) return <div className="splash">Loading NHL history since 1966…</div>;
 
   return (
     <div className="app">
@@ -80,7 +82,7 @@ export function App() {
             What-If <span>Machine</span>
           </h1>
           <p className="sub">
-            Undo a trade or redo a draft pick, and the machine replays NHL history from {ix.ds.seasons[0].label} to {ix.ds.seasons.at(-1)!.label}:
+            Undo a trade, redo a draft pick or heal an injury, and the machine replays NHL history from {ix.ds.seasons[0].label} to {ix.ds.seasons.at(-1)!.label}:
             roster WAR, standings, cap commitments and simulated Stanley Cup odds.
           </p>
         </div>
@@ -103,6 +105,7 @@ export function App() {
               [
                 ["trades", "Landmark trades"],
                 ["draft", "Redo a draft"],
+                ["injury", "Undo an injury"],
                 ["custom", "Custom move"],
               ] as [Tab, string][]
             ).map(([k, label]) => (
@@ -113,10 +116,11 @@ export function App() {
           </nav>
           {tab === "trades" && <TradesPanel ix={ix} changes={changes} careerWar={careerWar} onAdd={add} onRemove={remove} />}
           {tab === "draft" && <DraftPanel ix={ix} careerWar={careerWar} onAdd={add} />}
+          {tab === "injury" && <InjuryPanel ix={ix} changes={changes} careerWar={careerWar} onAdd={add} onRemove={remove} />}
           {tab === "custom" && <CustomPanel ix={ix} careerWar={careerWar} onAdd={add} />}
         </aside>
 
-        <section className="results">{computed ? <Results ix={ix} cap={cap} computed={computed} busy={busy} hasChanges={changes.length > 0} /> : <div className="card">Simulating…</div>}</section>
+        <section className="results">{computed ? <Results ix={ix} cap={cap} computed={computed} busy={busy} hasChanges={changes.length > 0} gmMeters={gmMeters} onGmMeter={(name, v) => setGmMeters((m) => { const next = { ...m }; if (v === null) delete next[name]; else next[name] = v; return next; })} /> : <div className="card">Simulating…</div>}</section>
       </main>
 
       <footer className="foot">

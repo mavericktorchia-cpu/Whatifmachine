@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { computeSeasonWar, goalsPerWin, type GoalieLine, type SkaterLine, type TeamLine } from "../src/engine/war";
 import { CAP_CEILING, playoffFormat, seasonLabel } from "../src/data/league";
-import type { Dataset, DraftRow, PlayerInfo, PlayerSeasonRow, SeasonInfo, TeamSeason } from "../src/engine/types";
+import type { Dataset, DraftRow, GmTenure, PlayerInfo, PlayerSeasonRow, SeasonInfo, TeamSeason } from "../src/engine/types";
 
 const RAW = join(process.cwd(), "data-raw");
 const read = <T>(p: string): T => JSON.parse(readFileSync(join(RAW, p), "utf8")) as T;
@@ -80,7 +80,15 @@ for (const { id } of seasonsRaw) {
     gp: r.gamesPlayed, w: r.wins, pts: r.points, gf: r.goalFor, ga: r.goalAgainst,
   }));
   standings[id] = ts;
-  for (const r of st) if (!teamInfo[r.teamAbbrev.default]) throw new Error(`unknown team ${r.teamAbbrev.default}`);
+  for (const r of st) {
+    const ab = r.teamAbbrev.default;
+    if (teamInfo[ab]) continue;
+    // A few historical clubs use a different code in standings than in the team list (e.g. CBN/CLE).
+    const byName = nameToAbbrs.get(r.teamName.default)?.[0];
+    if (!byName) throw new Error(`unknown team ${ab} (${r.teamName.default})`);
+    teamInfo[ab] = teamInfo[byName];
+    nameToAbbrs.set(r.teamName.default, [...(nameToAbbrs.get(r.teamName.default) ?? []), ab]);
+  }
   const teamLines: TeamLine[] = ts.map((t) => ({ t: t.t, gp: t.gp, gf: t.gf, ga: t.ga }));
 
   const skaterLines: SkaterLine[] = [];
@@ -154,16 +162,66 @@ for (const { id } of seasonsRaw) {
 
 interface DraftApi { draftYear: number; roundNumber: number; overallPickNumber: number; triCode: string; playerId: number | null; playerName: string; position: string; teamPickHistory: string | null; supplementalDraft: string }
 const draft: DraftRow[] = read<{ data: DraftApi[] }>("draft.json")
-  .data.filter((d) => d.draftYear >= 1979 && d.supplementalDraft !== "Y")
+  .data.filter((d) => d.draftYear >= 1963 && d.supplementalDraft !== "Y")
   .sort((a, b) => a.draftYear - b.draftYear || a.overallPickNumber - b.overallPickNumber)
   .map((d) => [d.draftYear, d.roundNumber, d.overallPickNumber, d.triCode, d.playerId && players[d.playerId] ? d.playerId : 0, d.playerName, d.position, d.teamPickHistory ?? ""]);
 for (const d of draft) {
   if (d[4] && !players[d[4]].dr) players[d[4]].dr = [d[0], d[2], d[1], d[3]];
 }
 
-const ds: Dataset = { generatedAt: new Date().toISOString(), seasons, teams: teamInfo, standings, players, rows, draft };
+// Birth years, for aging curves.
+for (const { id } of seasonsRaw) {
+  for (const kind of ["skaters", "goalies"]) {
+    for (const b of read<{ data: { playerId: number; birthDate: string | null }[] }>(`bios/${kind}-${id}.json`).data) {
+      const p = players[b.playerId];
+      if (p && b.birthDate && !p.b) p.b = Number(b.birthDate.slice(0, 4));
+    }
+  }
+}
+
+// General manager tenures, parsed from each franchise's history ("Name: Sept. 10, 1987 – May 4, 2015").
+const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+const ENTITIES: Record<string, string> = { ndash: "–", mdash: "—", nbsp: " ", amp: "&", rsquo: "’", lsquo: "‘", apos: "'", quot: '"', eacute: "é", egrave: "è", ccedil: "ç", ouml: "ö", auml: "ä", uuml: "ü", aring: "å", oslash: "ø" };
+const ent = (t: string) =>
+  t
+    .replace(/<[^>]+>/g, "")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&([a-z]+);/gi, (m, n) => ENTITIES[n.toLowerCase()] ?? m)
+    .replace(/\s+/g, " ")
+    .trim();
+function parseDate(t: string, fallbackYear?: number): string | null {
+  const m = t.trim().match(/^([A-Za-z]+)\.?\s*(\d{1,2})?,?\s*(\d{4})?$/);
+  if (!m) return null;
+  const mon = MONTHS[m[1].slice(0, 3).toLowerCase()];
+  const year = m[3] ? Number(m[3]) : fallbackYear;
+  if (!mon || !year) return null;
+  return `${year}-${String(mon).padStart(2, "0")}-${String(m[2] ? Number(m[2]) : 1).padStart(2, "0")}`;
+}
+const gms: GmTenure[] = [];
+const gmFailures: string[] = [];
+for (const f of read<{ data: { id: number; generalManagerHistory: string | null }[] }>("franchise-detail.json").data) {
+  for (const li of (f.generalManagerHistory ?? "").match(/<li>[\s\S]*?<\/li>/g) ?? []) {
+    const t = ent(li);
+    const m = t.match(/^(.+?):\s*(.+?)\s*[–-]\s*(.+)$/);
+    if (!m || t.startsWith("*")) continue;
+    const toYear = m[3].match(/(\d{4})/)?.[1];
+    const from = parseDate(m[2], toYear ? Number(toYear) : undefined);
+    let to = /present/i.test(m[3]) ? null : parseDate(m[3]);
+    // "Dec. 5-9, 2021": the end date borrows the start date's month.
+    if (to === null && from && /^\d{1,2},?\s*\d{4}$/.test(m[3].trim())) to = parseDate(`${m[2].trim().split(/\s+/)[0]} ${m[3]}`);
+    if (!from || (to === null && !/present/i.test(m[3]))) {
+      gmFailures.push(t);
+      continue;
+    }
+    gms.push({ name: m[1].replace(/\s*\(.*?\)\s*/g, " ").trim(), franchise: f.id, from, to });
+  }
+}
+
+if (gmFailures.length) throw new Error(`could not parse GM tenures:\n${gmFailures.join("\n")}`);
+const ds: Dataset = { generatedAt: new Date().toISOString(), seasons, teams: teamInfo, standings, players, rows, draft, gms };
 mkdirSync(join(process.cwd(), "public", "data"), { recursive: true });
 const out = join(process.cwd(), "public", "data", "nhl.json");
 writeFileSync(out, JSON.stringify(ds));
 console.log(`wrote ${out}: ${seasons.length} seasons, ${Object.keys(players).length} players, ${rows.length} rows, ${draft.length} picks (${(readFileSync(out).length / 1e6).toFixed(1)} MB)`);
+console.log(`${gms.length} GM tenures; birth years for ${Object.values(players).filter((p) => p.b).length}/${Object.keys(players).length} players`);
 console.log(`missing champions: ${seasons.filter((s) => !s.champion).map((s) => s.label).join(", ") || "none"}`);

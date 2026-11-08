@@ -13,6 +13,7 @@
   --warn: #9a6700;
   --chip-in: #e1f4ec;
   --chip-out: #fbe6e4;
+  --chip-heal: #e6effd;
   --radius: 10px;
   --shadow: 0 1px 2px rgb(16 24 40 / 6%);
   color-scheme: light;
@@ -34,6 +35,7 @@
     --warn: #e0b44c;
     --chip-in: #163428;
     --chip-out: #3b1d1b;
+    --chip-heal: #1b2a40;
     color-scheme: dark;
   }
 }
@@ -53,6 +55,7 @@
     --warn: #e0b44c;
     --chip-in: #163428;
     --chip-out: #3b1d1b;
+    --chip-heal: #1b2a40;
     color-scheme: dark;
   }
 
@@ -723,4 +726,87 @@ label.block input {
 .draft-notes ul {
   margin: 4px 0 0;
   padding-left: 18px;
+}
+
+.chip.heal {
+  background: var(--chip-heal);
+  color: var(--accent);
+}
+.health-compare {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.health-compare > div:not(.arrow) {
+  display: flex;
+  flex-direction: column;
+}
+.health-compare .arrow {
+  color: var(--muted);
+  font-size: 18px;
+}
+.gm-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.gm-meters h3 {
+  font-size: 14px;
+}
+.gm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.meter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+input.meter {
+  flex: 1 1 160px;
+  min-width: 0;
+  accent-color: var(--accent);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.meter-val {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
+.pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.pill.good {
+  background: var(--chip-in);
+  color: var(--up);
+}
+.pill.bad {
+  background: var(--chip-out);
+  color: var(--down);
+}
+.pill.sm {
+  padding: 0 6px;
+}
+.tabs {
+  flex-wrap: wrap;
+}
+.tabs button {
+  font-size: 13px;
 }

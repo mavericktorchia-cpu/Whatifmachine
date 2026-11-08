@@ -1,7 +1,7 @@
 # 🏒 What-If Machine
 
-An interactive "what if?" machine for NHL history. Undo a landmark trade or redo a draft pick, and the
-machine replays every season from **1979-80 to 2025-26**. It recomputes roster WAR, standings, playoff
+An interactive "what if?" machine for NHL history. Undo a landmark trade, redo a draft pick or heal a
+career-altering injury, and the machine replays every season from **1966-67 to 2025-26**. It recomputes roster WAR, standings, playoff
 fields, cap commitments and simulated **Stanley Cup odds** for every franchise the change touches.
 
 - **Landmark trades**: 23 curated deals (Gretzky, Lindros, Hasek, Roy, Kessel, Seguin, Hall-for-Larsson,
@@ -10,6 +10,10 @@ fields, cap commitments and simulated **Stanley Cup odds** for every franchise t
 - **Redo a draft**: every NHL draft since 1979 (11,000+ picks, from the NHL records API). Each pick shows
   career WAR and a hindsight "redo" rank. Replace any selection with another player from the same draft,
   and the two players swap their tenures with their drafting teams.
+- **Undo an injury**: eleven presets (Orr's knees, a healthy Lemieux, Bossy, Neely, LaFontaine, Bure,
+  Lindros, Kariya, Forsberg, Crosby, Savard), or heal anyone for any window.
+- **GM activity meters**: every general manager since 1966, scored 1-99 on how predictably they acted,
+  with a slider to override.
 - **Custom move**: send any player to any franchise from any season, for N seasons or the rest of his
   career.
 - **Stack changes**: changes apply in order. A later change sees the earlier ones; for example, once the
@@ -95,8 +99,8 @@ and every WAR change is broken down into *you / draft / depth / deadline*.
 - **Draft order.** After each changed season, the next draft's first round is re-ordered from the
   alternate standings: non-playoff teams first, then by points. The team gains or loses the historical
   value difference between its old and new slot, spread over the next ten seasons. That value comes from
-  every draft with a complete ten-year window: about 19.5 WAR for the #1 pick to its drafting team, 4.8
-  at #10 and 1.9 at #30 (smoothed so it never rises down the board). Expected value is used rather than
+  every draft with a complete ten-year window: about 17.2 WAR for the #1 pick to its drafting team, 4.0
+  at #10 and 1.7 at #30 (smoothed so it never rises down the board). Expected value is used rather than
   "whoever really went at that slot", because neighbouring picks can differ wildly (Giroux went 22nd).
   - Lottery winners and forfeited picks (3+ slots from their standings position) keep their slot.
   - The effect is first-order: only standings moved by your changes re-order a draft, never earlier draft
@@ -104,10 +108,39 @@ and every WAR change is broken down into *you / draft / depth / deadline*.
 - **Depth chart.** An arriving player takes games from the bottom quarter of his new team's depth chart at
   his position (F/D/G), not from a replacement-level call-up. Those players' WAR per game (clamped to
   −0.02…+0.03) is subtracted; a departure gives it back.
-- **Deadline moves.** Every mid-season team change since 1979 is grouped by fifths of the final standings.
-  Best to worst, each fifth nets about +0.15, +0.19, +0.16, −0.09 and −0.43 WAR in-season: bad teams sell
+- **Deadline moves.** Every mid-season team change since 1966 is grouped by fifths of the final standings.
+  Best to worst, each fifth nets about +0.11, +0.15, +0.16, −0.05 and −0.40 WAR in-season: bad teams sell
   more than good teams buy. When a team's alternate standing moves, it gets the difference between the
   curve at its new and old standing (changes under 0.05 WAR are ignored).
+
+### Injuries (`src/engine/injuries.ts`, `aging.ts`)
+A healthy player keeps producing at his pre-injury rate: WAR per game over his last three healthy
+seasons (40+ games, at least half the schedule), or his three best if there are none.
+- **Aging.** That rate follows a league aging curve measured from the data with the delta method:
+  every skater with 40+ games in consecutive seasons. It peaks at 26 and halves by 33.
+- **Games played.** He plays 92% of his team's games (adjustable).
+- **Never worse than reality.** If he really produced more in a season (Lemieux's 1995-96), that
+  season stands.
+- **Team.** Extra WAR and games go to his team, and the extra games displace depth players. Presets can
+  keep him with one club (Orr stays a Bruin, so his Chicago games move to Boston).
+
+### GM activity meter (`src/engine/gm.ts`)
+GM tenures come from the NHL records API's franchise histories (318 tenures with exact dates). Each GM
+is scored from his real record:
+- **Deadline discipline.** How well his in-season trading matched his team's situation: the cosine
+  between what the league curve expects at his standing and what he actually did.
+- **Draft return.** WAR his first- and second-round picks gave the club over ten seasons, against what
+  those slots returned in the same draft year.
+
+Both are shrunk toward average for short tenures, standardised, and combined into a 1-99 meter (league
+average 50). Lower means more likely to make a move that makes less sense. In a scenario:
+- **Deadline response** is multiplied by `(meter − 25) / 25`: 50 is the league norm, 75+ reacts twice as
+  hard, and below 25 the GM does the opposite of what the standings call for.
+- **Draft-slot value** is multiplied by `meter / 50` (bounded 0.4-1.6).
+
+The meter measures predictability, not greatness. Sam Pollock rates low because his dynasty Canadiens
+often traded against their standings (dealing for future picks while contending). Any meter can be
+overridden in the team view, and overrides travel with the share link.
 
 ## Limitations
 
@@ -116,8 +149,9 @@ and every WAR change is broken down into *you / draft / depth / deadline*.
   cash and future considerations are listed but carry no value.
 - League responses are averages, not predictions of specific moves. Free-agent signings, cap-forced
   moves and player development in a different environment are not modelled.
-- Coverage starts in 1979-80, the first season after the WHA merger. The 2004-05 lockout season doesn't
-  exist.
+- Coverage starts in 1966-67, the last Original Six season. WHA seasons aren't included, and the 2004-05
+  lockout season doesn't exist.
+- The 1974-79 preliminary-round format and the 2020 bubble are approximations.
 
 ## Project layout
 

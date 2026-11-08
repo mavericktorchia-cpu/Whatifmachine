@@ -16,6 +16,7 @@
 export const REPL_SHARE = 0.5;
 export const GOALIE_REPL_GAP = 0.006;
 export const GOALIE_SHRINK = 0.75;
+export const GOALIE_REPL_GA_FACTOR = 1.06;
 export const REPL_SHOTS_FACTOR = 1.05;
 export const REL_PM_WEIGHT = 0.08;
 
@@ -92,6 +93,8 @@ export function computeSeasonWar(teams: TeamLine[], skaters: SkaterLine[], goali
     lgSaves += g.sa - g.ga;
   }
   const lgSV = lgSA ? lgSaves / lgSA : 0.9;
+  const lgToi = goalies.reduce((s, g) => s + g.toi, 0);
+  const lgGA60 = lgToi ? (goalies.reduce((s, g) => s + g.ga, 0) * 3600) / lgToi : 3;
   const lgSApg = lgGP ? lgSA / lgGP : 30;
   const teamGP = new Map(teams.map((t) => [t.t, t.gp]));
   const teamDef = new Map<string, number>();
@@ -128,6 +131,9 @@ export function computeSeasonWar(teams: TeamLine[], skaters: SkaterLine[], goali
     if (g.sa > 0) {
       const sv = (g.sa - g.ga) / g.sa;
       gar = GOALIE_SHRINK * g.sa * (sv - (lgSV - GOALIE_REPL_GAP));
+    } else if (g.toi > 0) {
+      // No shot data: compare goals against with a replacement goalie's rate over the same minutes.
+      gar = GOALIE_SHRINK * ((lgGA60 * GOALIE_REPL_GA_FACTOR * g.toi) / 3600 - g.ga);
     } else {
       gar = 0;
     }

@@ -1,5 +1,6 @@
 import { TRADES, type TradeDef } from "../data/trades";
-import { seasonForDate } from "../data/league";
+import { seasonForDate, seasonLabel } from "../data/league";
+import { projectHealthy, type Extra } from "./injuries";
 import { abbrFor, franchiseOf, resolvePlayer, type DataIndex } from "./dataIndex";
 
 /**
@@ -13,7 +14,8 @@ export type Tenure = "mirror" | "career";
 export type Change =
   | { kind: "trade"; tradeId: string; tenure: Tenure }
   | { kind: "draft"; year: number; overall: number; altPid: number; tenure: Tenure }
-  | { kind: "move"; pid: number; season: number; toFranchise: number; years: number | "career" };
+  | { kind: "move"; pid: number; season: number; toFranchise: number; years: number | "career" }
+  | { kind: "injury"; pid: number; from: number; to: number; availability?: number; team?: string; presetId?: string };
 
 /** Row index → team the row belongs to in the alternate timeline (null = removed from the league). */
 export type Overrides = Map<number, string | null>;
@@ -36,6 +38,8 @@ export interface AppliedChange {
   title: string;
   moves: Move[];
   warnings: string[];
+  /** Healthy-projection production added by an injury change. */
+  extras?: Extra[];
 }
 
 export function tradeById(id: string): TradeDef | undefined {
@@ -112,6 +116,25 @@ export function applyChange(ix: DataIndex, ov: Overrides, change: Change): Appli
   const warnings: string[] = [];
   const moves: Move[] = [];
 
+  if (change.kind === "injury") {
+    const p = ix.ds.players[change.pid];
+    const name = p?.n ?? String(change.pid);
+    // Keeping him with one club: his real seasons elsewhere in the window move there first.
+    if (change.team) {
+      const fr = franchiseOf(ix, change.team);
+      const rows = (ix.rowsByPlayer.get(change.pid) ?? []).filter((i) => {
+        const r = ix.ds.rows[i];
+        const t = currentTeam(ix, ov, i);
+        return r[1] >= change.from && r[1] <= change.to && t !== null && franchiseOf(ix, t) !== fr;
+      });
+      moves.push(...reassign(ix, ov, rows, fr, change.pid, warnings));
+    }
+    const proj = projectHealthy(ix, { pid: change.pid, from: change.from, to: change.to, availability: change.availability, team: change.team, teamOf: (i) => currentTeam(ix, ov, i) });
+    if (!proj) return { change, title: `${name} stays healthy`, moves, warnings: [...warnings, `Not enough healthy seasons to project ${name}`], extras: [] };
+    const span = change.from === change.to ? seasonLabel(change.from) : `${seasonLabel(change.from)} to ${seasonLabel(change.to)}`;
+    return { change, title: `${name} stays healthy, ${span}`, moves, warnings, extras: proj.extras };
+  }
+
   if (change.kind === "trade") {
     const t = tradeById(change.tradeId);
     if (!t) return { change, title: `Unknown trade ${change.tradeId}`, moves, warnings: ["unknown trade"] };
@@ -172,8 +195,8 @@ export function applyChange(ix: DataIndex, ov: Overrides, change: Change): Appli
   return { change, title: `${p?.n ?? change.pid} plays for the ${destName} ${span}`, moves, warnings };
 }
 
-export function applyAll(ix: DataIndex, changes: Change[]): { overrides: Overrides; applied: AppliedChange[] } {
+export function applyAll(ix: DataIndex, changes: Change[]): { overrides: Overrides; extras: Extra[]; applied: AppliedChange[] } {
   const overrides: Overrides = new Map();
   const applied = changes.map((c) => applyChange(ix, overrides, c));
-  return { overrides, applied };
+  return { overrides, extras: applied.flatMap((a) => a.extras ?? []), applied };
 }

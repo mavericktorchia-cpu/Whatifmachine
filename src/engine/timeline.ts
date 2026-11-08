@@ -3,7 +3,9 @@ import { buildField, cupOdds, type PlayoffTeam } from "./playoffs";
 import { hashSeed, mulberry32 } from "./rng";
 import type { CapModel } from "./cap";
 import type { Overrides } from "./scenario";
-import { ALL_RESPONSES, DRAFT_WINDOW, deadlineModel, deadlineNet, depthCorrection, draftValueModel, percentiles, redraftFirstRound, type DeadlineModel, type DraftValueModel, type ResponseOptions } from "./responses";
+import type { Extra } from "./injuries";
+import { deadlineMultiplier, draftDate, draftMultiplier, gmForSeason, gmModel } from "./gm";
+import { ALL_RESPONSES, DRAFT_WINDOW, deadlineModel, deadlineNet, depthCorrection, draftValueModel, rowGames, percentiles, redraftFirstRound, type DeadlineModel, type DraftValueModel, type ResponseOptions } from "./responses";
 
 /** Standings points per win above replacement (a win is worth two points). */
 export const POINTS_PER_WAR = 2;
@@ -40,6 +42,9 @@ export interface TeamSeasonResult {
   capDelta: number | null; // millions; positive = more committed cap in the alternate timeline
   arrivals: number[]; // player ids
   departures: number[];
+  healthy: number[]; // players with a healthy-projection boost this season
+  gm: string | null; // general manager at the trade deadline
+  gmMeter: number; // his activity meter (with any user override)
 }
 
 export interface SeasonResult {
@@ -68,6 +73,10 @@ export interface Timeline {
 }
 
 export interface TimelineOptions {
+  /** Healthy-projection production from injury changes. */
+  extras?: Extra[];
+  /** User overrides of GM activity meters, by GM name. */
+  gmMeters?: Record<string, number>;
   sims?: number;
   seed?: number;
   responses?: ResponseOptions;
@@ -114,6 +123,8 @@ export function computeTimeline(ix: DataIndex, userOverrides: Overrides, cap: Ca
   const seed = opts.seed ?? 1;
   const resp = opts.responses ?? ALL_RESPONSES;
   const dl = deadlineModel(ix);
+  const gms = gmModel(ix);
+  const meterOf = (name: string | null) => (name ? (opts.gmMeters?.[name] ?? gms.scores.get(name)?.meter ?? 50) : 50);
 
   const ov = userOverrides;
   const dv = draftValueModel(ix);
@@ -142,6 +153,9 @@ export function computeTimeline(ix: DataIndex, userOverrides: Overrides, cap: Ca
       if (to) arrived.set(to, [...(arrived.get(to) ?? []), i]);
     }
 
+    const extra = new Map<string, Extra[]>();
+    for (const e of opts.extras ?? []) if (e.season === s.id) extra.set(e.team, [...(extra.get(e.team) ?? []), e]);
+
     const comp = new Map<string, WarComponents>();
     const capD = new Map<string, number>();
     for (const t of st) {
@@ -157,7 +171,12 @@ export function computeTimeline(ix: DataIndex, userOverrides: Overrides, cap: Ca
           if (hit) cd += sign * hit.aav * (r[3] / Math.max(1, seasonGp.get(`${r[0]}|${r[1]}`) ?? 1));
         }
       }
-      if (resp.depth && (inn.length || out.length)) c.depth = depthCorrection(ix, t.t, s.id, inn, out);
+      const healthy = extra.get(t.t) ?? [];
+      for (const e of healthy) c.direct += e.war;
+      if (resp.depth && (inn.length || out.length || healthy.length)) {
+        const arrivedGames = [...inn.map((i) => rowGames(ix, i)), ...healthy.map((e) => ({ pos: ix.ds.players[e.pid]?.pos ?? "F", gp: e.gp }))];
+        c.depth = depthCorrection(ix, t.t, s.id, arrivedGames, out.map((i) => rowGames(ix, i)));
+      }
       comp.set(t.t, c);
       capD.set(t.t, cd);
     }
@@ -171,7 +190,7 @@ export function computeTimeline(ix: DataIndex, userOverrides: Overrides, cap: Ca
       const pA = percentiles(st);
       const pB = percentiles(st.map((t) => ({ t: t.t, gp: t.gp, pts: preDeadline(t) })));
       for (const t of st) {
-        const d = deadlineNet(dl, pB.get(t.t)!) - deadlineNet(dl, pA.get(t.t)!);
+        const d = (deadlineNet(dl, pB.get(t.t)!) - deadlineNet(dl, pA.get(t.t)!)) * deadlineMultiplier(meterOf(gmForSeason(ix, t.t, s.id)));
         if (Math.abs(d) >= MIN_DEADLINE_WAR) comp.get(t.t)!.deadline = d;
       }
     }
@@ -233,6 +252,9 @@ export function computeTimeline(ix: DataIndex, userOverrides: Overrides, cap: Ca
         capDelta: s.capCeiling ? (capD.get(t.t) ?? 0) : null,
         arrivals: [...new Set(inn.map((i) => ix.ds.rows[i][0]))],
         departures: [...new Set((departed.get(t.t) ?? []).map((i) => ix.ds.rows[i][0]))],
+        healthy: (extra.get(t.t) ?? []).map((e) => e.pid),
+        gm: gmForSeason(ix, t.t, s.id),
+        gmMeter: meterOf(gmForSeason(ix, t.t, s.id)),
       };
       byFranchise.set(res.franchise, [...(byFranchise.get(res.franchise) ?? []), res]);
       return res;
@@ -253,7 +275,8 @@ export function computeTimeline(ix: DataIndex, userOverrides: Overrides, cap: Ca
       const shifts = redraftFirstRound(ix, s.id, key((t) => t.pts, baseField), key((t) => firstOrder(t), altFirst));
       for (const sh of shifts) {
         const fr = franchiseOf(ix, sh.holder);
-        const dW = (dv.value[sh.to] ?? 0) - (dv.value[sh.from] ?? 0);
+        const draftGm = gms.at(fr, draftDate(sh.year));
+        const dW = ((dv.value[sh.to] ?? 0) - (dv.value[sh.from] ?? 0)) * draftMultiplier(meterOf(draftGm));
         dv.timing.forEach((share, off) => {
           const season = (sh.year + off) * 10000 + sh.year + off + 1;
           if (!ix.season.has(season)) return;
@@ -261,7 +284,7 @@ export function computeTimeline(ix: DataIndex, userOverrides: Overrides, cap: Ca
           draftAdj.set(k, (draftAdj.get(k) ?? 0) + dW * share);
         });
         if (Math.abs(dW) >= 0.2) {
-          notes.push({ season: s.id, team: sh.holder, war: dW, text: `${sh.year} draft: ${sh.holder} picks #${sh.to} instead of #${sh.from} (${dW > 0 ? "+" : "−"}${Math.abs(dW).toFixed(1)} expected WAR over ${DRAFT_WINDOW} seasons)` });
+          notes.push({ season: s.id, team: sh.holder, war: dW, text: `${sh.year} draft: ${sh.holder} picks #${sh.to} instead of #${sh.from} (${dW > 0 ? "+" : "−"}${Math.abs(dW).toFixed(1)} expected WAR over ${DRAFT_WINDOW} seasons${draftGm ? `; GM ${draftGm}` : ""})` });
         }
       }
     }

@@ -32,8 +32,8 @@ export function seriesWinProb(p: number, bestOf = 7): number {
 
 const byStanding = (a: PlayoffTeam, b: PlayoffTeam) => b.pts - a.pts || b.w - a.w || b.rating - a.rating || a.t.localeCompare(b.t);
 
-function series(a: PlayoffTeam, b: PlayoffTeam, rng: Rng): PlayoffTeam {
-  return rng() < seriesWinProb(gameWinProb(a.rating, b.rating)) ? a : b;
+function series(a: PlayoffTeam, b: PlayoffTeam, rng: Rng, bestOf = 7): PlayoffTeam {
+  return rng() < seriesWinProb(gameWinProb(a.rating, b.rating), bestOf) ? a : b;
 }
 
 /** Re-seeded rounds: best remaining seed plays worst remaining seed. `teams` must be in seed order. */
@@ -74,6 +74,31 @@ export interface Field {
 
 export function buildField(format: PlayoffFormat, teams: PlayoffTeam[]): Field {
   const sorted = [...teams].sort(byStanding);
+
+  if (format === "overall4") {
+    // Original Six: 1st vs 3rd, 2nd vs 4th.
+    const f = sorted.slice(0, 4);
+    return { qualified: new Set(f.map((t) => t.t)), run: (rng) => series(series(f[0], f[2], rng), series(f[1], f[3], rng), rng).t };
+  }
+
+  if (format === "bye12") {
+    // 1974-79: top three per division. Division winners get byes; the other eight play a best-of-three
+    // preliminary round (5 v 12, 6 v 11, …); the final eight are re-seeded by points.
+    const divs = [...groupBy(sorted, (t) => t.div ?? "?").values()].map((d) => d.slice(0, 3));
+    const winners = divs.map((d) => d[0]).sort(byStanding);
+    const others = divs.flatMap((d) => d.slice(1)).sort(byStanding);
+    const field = [...winners, ...others];
+    return {
+      qualified: new Set(field.map((t) => t.t)),
+      run: (rng) => {
+        const prelim: PlayoffTeam[] = [];
+        for (let i = 0; i < others.length / 2; i++) prelim.push(series(others[i], others[others.length - 1 - i], rng, 3));
+        const order = new Map(field.map((t, i) => [t, i]));
+        const eight = [...winners, ...prelim].sort((x, y) => order.get(x)! - order.get(y)!);
+        return reseeded(eight, rng)[0].t;
+      },
+    };
+  }
 
   if (format === "overall16") {
     const field = sorted.slice(0, 16);
