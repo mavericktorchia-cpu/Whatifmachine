@@ -22,7 +22,7 @@ fields, cap commitments and simulated **Stanley Cup odds** for every franchise t
 ## Live site
 
 Deployed to GitHub Pages by `.github/workflows/pages.yml` on every push:
-**https://mavericktorchia-cpu.github.io/whatifmachine/** (one-time setup: repo *Settings → Pages → Source: GitHub Actions*).
+**https://mavericktorchia-cpu.github.io/Whatifmachine/** (one-time setup: repo *Settings → Pages → Source: GitHub Actions*).
 
 ## Run it
 
