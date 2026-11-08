@@ -1,0 +1,31 @@
+{
+  "name": "whatifmachine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Historical NHL What-If? Trade Machine: undo trades and draft picks, then replay franchise history.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "data:fetch": "tsx scripts/fetch-data.ts",
+    "data:build": "tsx scripts/build-data.ts",
+    "data": "npm run data:fetch && npm run data:build"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}
