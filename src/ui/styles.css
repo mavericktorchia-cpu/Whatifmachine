@@ -19,7 +19,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0e1116;
     --panel: #171b22;
     --ink: #e8ebf0;
@@ -37,6 +37,24 @@
     color-scheme: dark;
   }
 }
+
+:root[data-theme="dark"] {
+    --bg: #0e1116;
+    --panel: #171b22;
+    --ink: #e8ebf0;
+    --muted: #96a0b0;
+    --line: #2a303b;
+    --accent: #5aa2ff;
+    --accent-ink: #0b1220;
+    --accent-soft: #1b2a40;
+    --real: #6b7484;
+    --up: #45c08e;
+    --down: #ff7b6e;
+    --warn: #e0b44c;
+    --chip-in: #163428;
+    --chip-out: #3b1d1b;
+    color-scheme: dark;
+  }
 
 * {
   box-sizing: border-box;
@@ -149,7 +167,9 @@ label.block input {
 .app {
   max-width: 1440px;
   margin: 0 auto;
-  padding: 20px 20px 40px;
+  padding-block: 20px 40px;
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
 }
 
 .top {
@@ -637,7 +657,9 @@ label.block input {
 
 @media (max-width: 520px) {
   .app {
-    padding: 14px 12px 30px;
+    padding-block: 14px 30px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
   }
   .sides,
   .grid2 {

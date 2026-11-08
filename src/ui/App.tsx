@@ -85,7 +85,7 @@ export function App() {
           <button className="ghost" onClick={() => setSeed((s) => s + 1)} title="Draw a different alternate history from the same odds">
             🎲 Re-roll timeline <small>#{seed}</small>
           </button>
-          <button className="ghost" onClick={() => navigator.clipboard?.writeText(window.location.href)} disabled={!changes.length} title="Copy a link to this scenario">
+          <button className="ghost" onClick={() => navigator.clipboard?.writeText(window.location.href).catch(() => undefined)} disabled={!changes.length} title="Copy a link to this scenario">
             🔗 Copy link
           </button>
         </div>

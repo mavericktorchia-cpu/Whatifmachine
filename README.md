@@ -19,6 +19,11 @@ fields, cap commitments and simulated **Stanley Cup odds** for every franchise t
 - **Alternate champions**: one sampled alternate history, tied to real history (see below). Re-roll it, and
   share the whole scenario: it lives in the URL.
 
+## Live site
+
+Deployed to GitHub Pages by `.github/workflows/pages.yml` on every push:
+**https://mavericktorchia-cpu.github.io/whatifmachine/** (one-time setup: repo *Settings → Pages → Source: GitHub Actions*).
+
 ## Run it
 
 ```bash
